@@ -295,7 +295,7 @@ Sistem menggunakan **Hybrid ML + Empirical Estimation**:
 | Tidak ada data lalu lintas real-time | Congestion menggunakan estimasi rule-based | API lalu lintas berbayar |
 | Waiting time adalah scheduled average | Tidak mencerminkan kondisi real-time | GTFS tidak memiliki data real-time |
 
-### Saran Pengembangan (v4)
+### Saran Pengembangan (v3)
 
 | Pengembangan | Manfaat |
 |---|---|
