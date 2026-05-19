@@ -12,7 +12,7 @@ import requests as http_requests
 
 warnings.filterwarnings('ignore')
 
-# PAGE CONFIG
+# KONFIGURASI HALAMAN
 st.set_page_config(
     page_title="Smart Transjakarta Route Optimizer",
     page_icon=":bus:",
@@ -20,7 +20,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# DARK MODE CSS
+# CSS MODE GELAP (DARK MODE)
 st.markdown("""
 <style>
     .stApp {
@@ -188,59 +188,59 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# CONSTANTS & HELPERS
-CURRENT_YEAR = datetime.now().year
-CURRENT_DATETIME = datetime.now()
+# KONSTANTA & FUNGSI PEMBANTU
+TAHUN_SEKARANG = datetime.now().year
+WAKTU_SEKARANG = datetime.now()
 
-def get_config():
+def ambil_konfigurasi():
     if 'system_config' not in st.session_state:
         with open('system_config.json') as f:
             st.session_state.system_config = json.load(f)
     return st.session_state.system_config
 
-def get_peak_ranges():
-    return get_config()['peak_hours']
+def ambil_jam_sibuk():
+    return ambil_konfigurasi()['peak_hours']
 
-def get_corridor_speed(corridor_name):
-    cfg = get_config()
-    per_corridor = cfg['speed'].get('per_corridor_kmh', {})
-    if corridor_name in per_corridor:
-        return per_corridor[corridor_name]
+def ambil_kecepatan_koridor(nama_koridor):
+    cfg = ambil_konfigurasi()
+    per_koridor = cfg['speed'].get('per_corridor_kmh', {})
+    if nama_koridor in per_koridor:
+        return per_koridor[nama_koridor]
     return cfg['speed']['fallback_kmh']
 
-def get_base_speed_kmh(corridor_name=None):
-    cfg = get_config()
-    if corridor_name:
-        return get_corridor_speed(corridor_name)
+def ambil_kecepatan_dasar_kmh(nama_koridor=None):
+    cfg = ambil_konfigurasi()
+    if nama_koridor:
+        return ambil_kecepatan_koridor(nama_koridor)
     return cfg['speed']['fallback_kmh']
 
-def get_effective_speed(weather_condition, corridor_name=None):
-    cfg = get_config()
-    base = get_base_speed_kmh(corridor_name)
-    weather_key = weather_condition.lower().replace(' ', '_')
-    adjustment = cfg['speed'].get('weather_adjustment', {}).get(weather_key, 1.0)
-    return round(base * adjustment, 1)
+def ambil_kecepatan_efektif(kondisi_cuaca, nama_koridor=None):
+    cfg = ambil_konfigurasi()
+    dasar = ambil_kecepatan_dasar_kmh(nama_koridor)
+    kunci_cuaca = kondisi_cuaca.lower().replace(' ', '_')
+    penyesuaian = cfg['speed'].get('weather_adjustment', {}).get(kunci_cuaca, 1.0)
+    return round(dasar * penyesuaian, 1)
 
-def get_weather_multiplier(weather_condition):
-    return get_config()['weather']['multipliers'].get(
-        weather_condition.lower().replace(' ', '_'), 1.0)
+def ambil_pengali_cuaca(kondisi_cuaca):
+    return ambil_konfigurasi()['weather']['multipliers'].get(
+        kondisi_cuaca.lower().replace(' ', '_'), 1.0)
 
-def capped_edge_weight(dist_km, speed_kmh):
-    cal = get_config()['speed']['edge_calibration']
-    min_speed = max(speed_kmh, cal['min_speed_kmh'])
-    effective_speed = min(min_speed, cal['max_speed_kmh'])
-    weight = max(2, dist_km / effective_speed * 60)
-    return min(weight, cal.get('max_segment_minutes', 15))
+def bobot_sisi_terbatas(jarak_km, kecepatan_kmh):
+    kal = ambil_konfigurasi()['speed']['edge_calibration']
+    kecepatan_min = max(kecepatan_kmh, kal['min_speed_kmh'])
+    kecepatan_efektif = min(kecepatan_min, kal['max_speed_kmh'])
+    bobot = max(2, jarak_km / kecepatan_efektif * 60)
+    return min(bobot, kal.get('max_segment_minutes', 15))
 
-def is_peak(hour, is_weekend=False):
-    if is_weekend:
+def apakah_jam_sibuk(jam, is_akhir_pekan=False):
+    if is_akhir_pekan:
         return False
-    for start, end in get_peak_ranges():
-        if start <= hour <= end:
+    for mulai, selesai in ambil_jam_sibuk():
+        if mulai <= jam <= selesai:
             return True
     return False
 
-def haversine(lat1, lon1, lat2, lon2):
+def hitung_jarak_haversine(lat1, lon1, lat2, lon2):
     try:
         R = 6371
         dlat = math.radians(lat2 - lat1)
@@ -250,84 +250,84 @@ def haversine(lat1, lon1, lat2, lon2):
     except:
         return 0
 
-def get_period(h):
-    if 5 <= h <= 10:
+def ambil_periode(jam):
+    if 5 <= jam <= 10:
         return 'Pagi'
-    elif 11 <= h <= 15:
+    elif 11 <= jam <= 15:
         return 'Siang'
-    elif 16 <= h <= 20:
+    elif 16 <= jam <= 20:
         return 'Sore'
     else:
         return 'Malam'
 
-FEATURES_CLF = ['hour', 'haversine_km', 'num_stops', 'direction',
-               'is_weekend', 'is_peak_hour', 'age', 'is_rain',
-               'corridorName', 'hour_period']
+FITUR_CLF = ['hour', 'haversine_km', 'num_stops', 'direction',
+             'is_weekend', 'is_peak_hour', 'age', 'is_rain',
+             'corridorName', 'hour_period']
 
-def predict_crowding_hybrid(clf, hour, hour_period, corridor_name, is_weekend, weather_condition='Cerah'):
-    cfg = get_config()
-    crowding_cfg = cfg['crowding']
-    is_peak_hour = is_peak(hour, is_weekend)
+def prediksi_kepadatan_hibrida(clf, jam, periode_jam, nama_koridor, is_akhir_pekan, kondisi_cuaca='Cerah'):
+    cfg = ambil_konfigurasi()
+    kepadatan_cfg = cfg['crowding']
+    is_jam_sibuk = apakah_jam_sibuk(jam, is_akhir_pekan)
 
-    ml_score = 0.5
+    skor_ml = 0.5
     if clf is not None:
         try:
-            row = pd.DataFrame([{
-                'hour': hour,
+            baris = pd.DataFrame([{
+                'hour': jam,
                 'haversine_km': cfg['analysis_summary']['avg_travel_time_minutes'] / 10,
                 'num_stops': 5,
                 'direction': 1,
-                'is_weekend': int(is_weekend),
-                'is_peak_hour': int(is_peak_hour),
+                'is_weekend': int(is_akhir_pekan),
+                'is_peak_hour': int(is_jam_sibuk),
                 'age': 30,
                 'is_rain': 0,
-                'corridorName': corridor_name,
-                'hour_period': hour_period
+                'corridorName': nama_koridor,
+                'hour_period': periode_jam
             }])
-            X = row[FEATURES_CLF]
+            X = baris[FITUR_CLF]
             proba = clf.predict_proba(X)[0]
             if len(proba) >= 3:
-                ml_score = proba[0] * 0.0 + proba[1] * 0.5 + proba[2] * 1.0
+                skor_ml = proba[0] * 0.0 + proba[1] * 0.5 + proba[2] * 1.0
             elif len(proba) == 2:
-                ml_score = proba[0] * 0.0 + proba[1] * 1.0
+                skor_ml = proba[0] * 0.0 + proba[1] * 1.0
         except Exception:
-            ml_score = 0.5
+            skor_ml = 0.5
 
-    day_key = 'weekend' if is_weekend else 'weekday'
-    base_cfg = cfg['historical_density_baseline'].get(day_key, cfg['historical_density_baseline'])
-    baseline_db = base_cfg.get('per_corridor', {})
-    global_baseline = base_cfg.get('global_per_hour', {})
-    cor_baseline = baseline_db.get(corridor_name, {})
-    baseline_score = float(cor_baseline.get(str(hour), global_baseline.get(str(hour), 0.05)))
+    kunci_hari = 'akhir_pekan' if is_akhir_pekan else 'hari_kerja'
+    dasar_cfg = cfg['historical_density_baseline'].get(kunci_hari, cfg['historical_density_baseline'])
+    baseline_db = dasar_cfg.get('per_corridor', {})
+    baseline_global = dasar_cfg.get('global_per_hour', {})
+    baseline_kor = baseline_db.get(nama_koridor, {})
+    skor_baseline = float(baseline_kor.get(str(jam), baseline_global.get(str(jam), 0.05)))
 
-    weather_key = weather_condition.lower().replace(' ', '_')
-    weather_adj = crowding_cfg.get('weather_impact', {}).get(weather_key, 0.0)
+    kunci_cuaca = kondisi_cuaca.lower().replace(' ', '_')
+    penyesuaian_cuaca = kepadatan_cfg.get('weather_impact', {}).get(kunci_cuaca, 0.0)
 
-    ml_w = crowding_cfg['ml_weight']
-    bl_w = crowding_cfg['baseline_weight']
-    final_score = ml_score * ml_w + baseline_score * bl_w + weather_adj
-    final_score = min(max(final_score, 0.0), 1.0)
+    bobot_ml = kepadatan_cfg['ml_weight']
+    bobot_bl = kepadatan_cfg['baseline_weight']
+    skor_akhir = skor_ml * bobot_ml + skor_baseline * bobot_bl + penyesuaian_cuaca
+    skor_akhir = min(max(skor_akhir, 0.0), 1.0)
 
-    label_info = None
-    for tier in crowding_cfg['labels']:
-        if tier['min'] <= final_score <= tier['max']:
-            label_info = tier
+    info_label = None
+    for tingkat in kepadatan_cfg['labels']:
+        if tingkat['min'] <= skor_akhir <= tingkat['max']:
+            info_label = tingkat
             break
-    if label_info is None:
-        label_info = crowding_cfg['labels'][1]
+    if info_label is None:
+        info_label = kepadatan_cfg['labels'][1]
 
-    parts = []
-    parts.append(f"ML: {ml_score:.2f} x {ml_w:.0%}")
-    parts.append(f"Baseline: {baseline_score:.2f} x {bl_w:.0%}")
-    if weather_adj > 0:
-        parts.append(f"Weather: +{weather_adj:.2f}")
-    explanation = " + ".join(parts)
+    bagian = []
+    bagian.append(f"ML: {skor_ml:.2f} x {bobot_ml:.0%}")
+    bagian.append(f"Baseline: {skor_baseline:.2f} x {bobot_bl:.0%}")
+    if penyesuaian_cuaca > 0:
+        bagian.append(f"Cuaca: +{penyesuaian_cuaca:.2f}")
+    penjelasan = " + ".join(bagian)
 
-    return label_info['label'], label_info['short'], final_score, explanation
+    return info_label['label'], info_label['short'], skor_akhir, penjelasan
 
-# DATA LOADING
-@st.cache_data(show_spinner="Loading Transjakarta data...")
-def load_data():
+# MEMUAT DATA
+@st.cache_data(show_spinner="Memuat data Transjakarta...")
+def muat_data():
     df = pd.read_csv('dfTransjakarta.csv')
     df['tapInTime'] = pd.to_datetime(df['tapInTime'])
     df['tapOutTime'] = pd.to_datetime(df['tapOutTime'])
@@ -337,119 +337,119 @@ def load_data():
     df['is_weekend'] = (df['day_of_week'] >= 5).astype(int)
     df['num_stops'] = df['stopEndSeq'] - df['stopStartSeq']
     df = df[df['num_stops'] > 0]
-    df['age'] = CURRENT_YEAR - df['payCardBirthDate']
+    df['age'] = TAHUN_SEKARANG - df['payCardBirthDate']
     df['age'] = df['age'].fillna(df['age'].median()).clip(10, 100)
     return df
 
-@st.cache_resource(show_spinner="Building route graph...")
-def build_graph(df):
+@st.cache_resource(show_spinner="Membangun graf rute...")
+def bangun_graf(df):
     G = nx.DiGraph()
-    stop_coords = {}
+    koordinat_halte = {}
 
-    all_stops = pd.concat([
+    semua_halte = pd.concat([
         df[['tapInStopsName', 'tapInStopsLat', 'tapInStopsLon']].rename(
             columns={'tapInStopsName': 'stop', 'tapInStopsLat': 'lat', 'tapInStopsLon': 'lon'}),
         df[['tapOutStopsName', 'tapOutStopsLat', 'tapOutStopsLon']].rename(
             columns={'tapOutStopsName': 'stop', 'tapOutStopsLat': 'lat', 'tapOutStopsLon': 'lon'})
     ]).drop_duplicates('stop').reset_index(drop=True)
 
-    for _, row in all_stops.iterrows():
-        s = row['stop']
-        stop_coords[s] = (row['lat'], row['lon'])
-        G.add_node(s, lat=row['lat'], lon=row['lon'])
+    for _, baris in semua_halte.iterrows():
+        s = baris['stop']
+        koordinat_halte[s] = (baris['lat'], baris['lon'])
+        G.add_node(s, lat=baris['lat'], lon=baris['lon'])
 
-    stop_seq_records = []
+    rekaman_urutan_halte = []
 
     tapin = df[['corridorID', 'corridorName', 'direction',
                 'tapInStopsName', 'stopStartSeq']].drop_duplicates()
     tapin = tapin.rename(columns={'tapInStopsName': 'stop', 'stopStartSeq': 'seq'})
-    stop_seq_records.append(tapin)
+    rekaman_urutan_halte.append(tapin)
 
     tapout = df[['corridorID', 'corridorName', 'direction',
                  'tapOutStopsName', 'stopEndSeq']].drop_duplicates()
     tapout = tapout.rename(columns={'tapOutStopsName': 'stop', 'stopEndSeq': 'seq'})
-    stop_seq_records.append(tapout)
+    rekaman_urutan_halte.append(tapout)
 
-    all_seq = pd.concat(stop_seq_records).drop_duplicates().dropna()
-    all_seq['seq'] = all_seq['seq'].astype(int)
+    semua_urutan = pd.concat(rekaman_urutan_halte).drop_duplicates().dropna()
+    semua_urutan['seq'] = semua_urutan['seq'].astype(int)
 
-    edge_weight_map = df.groupby(
+    peta_bobot_sisi = df.groupby(
         ['corridorID', 'direction', 'tapInStopsName', 'tapOutStopsName']
     )['travel_time'].mean().reset_index()
 
-    edges_added = set()
+    sisi_ditambahkan = set()
 
-    for (cid, direction), grp in all_seq.groupby(['corridorID', 'direction']):
-        grp = grp.sort_values('seq').drop_duplicates('stop')
-        ordered_stops = grp['stop'].tolist()
-        cor_name = grp.iloc[0].get('corridorName', str(cid)) if 'corridorName' in grp.columns else str(cid)
-        cor_speed = get_base_speed_kmh(cor_name)
+    for (cid, arah), grup in semua_urutan.groupby(['corridorID', 'direction']):
+        grup = grup.sort_values('seq').drop_duplicates('stop')
+        urutan_halte = grup['stop'].tolist()
+        nama_kor = grup.iloc[0].get('corridorName', str(cid)) if 'corridorName' in grup.columns else str(cid)
+        kecepatan_kor = ambil_kecepatan_dasar_kmh(nama_kor)
 
-        for i in range(len(ordered_stops) - 1):
-            u, v = ordered_stops[i], ordered_stops[i+1]
+        for i in range(len(urutan_halte) - 1):
+            u, v = urutan_halte[i], urutan_halte[i+1]
             if u == v:
                 continue
 
-            match = edge_weight_map[
-                (edge_weight_map['corridorID'] == cid) &
-                (edge_weight_map['direction'] == direction) &
-                (edge_weight_map['tapInStopsName'] == u) &
-                (edge_weight_map['tapOutStopsName'] == v)
+            cocok = peta_bobot_sisi[
+                (peta_bobot_sisi['corridorID'] == cid) &
+                (peta_bobot_sisi['direction'] == arah) &
+                (peta_bobot_sisi['tapInStopsName'] == u) &
+                (peta_bobot_sisi['tapOutStopsName'] == v)
             ]
 
-            d_uv = haversine(stop_coords.get(u, (0,0))[0], stop_coords.get(u, (0,0))[1],
-                             stop_coords.get(v, (0,0))[0], stop_coords.get(v, (0,0))[1])
-            if len(match) > 0:
-                raw_weight = match.iloc[0]['travel_time']
-                capped = capped_edge_weight(d_uv, cor_speed)
-                weight = min(raw_weight, capped)
+            jarak_uv = hitung_jarak_haversine(koordinat_halte.get(u, (0,0))[0], koordinat_halte.get(u, (0,0))[1],
+                                              koordinat_halte.get(v, (0,0))[0], koordinat_halte.get(v, (0,0))[1])
+            if len(cocok) > 0:
+                bobot_mentah = cocok.iloc[0]['travel_time']
+                dibatasi = bobot_sisi_terbatas(jarak_uv, kecepatan_kor)
+                bobot = min(bobot_mentah, dibatasi)
             else:
-                if u in stop_coords and v in stop_coords and d_uv > 0:
-                    weight = capped_edge_weight(d_uv, cor_speed)
+                if u in koordinat_halte and v in koordinat_halte and jarak_uv > 0:
+                    bobot = bobot_sisi_terbatas(jarak_uv, kecepatan_kor)
                 else:
-                    weight = 5
+                    bobot = 5
 
-            dist = haversine(stop_coords.get(u, (0,0))[0], stop_coords.get(u, (0,0))[1],
-                             stop_coords.get(v, (0,0))[0], stop_coords.get(v, (0,0))[1])
+            jarak = hitung_jarak_haversine(koordinat_halte.get(u, (0,0))[0], koordinat_halte.get(u, (0,0))[1],
+                                           koordinat_halte.get(v, (0,0))[0], koordinat_halte.get(v, (0,0))[1])
 
-            key = (u, v, cid)
-            if key not in edges_added:
-                if d_uv <= 3.0:
+            kunci = (u, v, cid)
+            if kunci not in sisi_ditambahkan:
+                if jarak_uv <= 3.0:
                     G.add_edge(u, v,
-                               weight=round(weight, 1),
-                               weight_km=round(dist, 3),
+                               weight=round(bobot, 1),
+                               weight_km=round(jarak, 3),
                                corridorID=cid,
-                               corridorName=cor_name,
-                               direction=direction,
+                               corridorName=nama_kor,
+                               direction=arah,
                                confidence=1.0,
                                edge_type='sequential')
-                    edges_added.add(key)
+                    sisi_ditambahkan.add(kunci)
 
-    for (cid, direction), grp in all_seq.groupby(['corridorID', 'direction']):
-        grp = grp.sort_values('seq').drop_duplicates('stop')
-        ordered = grp['stop'].tolist()
-        if len(ordered) < 3:
+    for (cid, arah), grup in semua_urutan.groupby(['corridorID', 'direction']):
+        grup = grup.sort_values('seq').drop_duplicates('stop')
+        urutan = grup['stop'].tolist()
+        if len(urutan) < 3:
             continue
-        cor_name = grp.iloc[0].get('corridorName', str(cid)) if 'corridorName' in grp.columns else str(cid)
-        cor_speed = get_base_speed_kmh(cor_name)
-        for i in range(len(ordered)):
-            for j in range(i+3, min(i+8, len(ordered))):
-                u, v = ordered[i], ordered[j]
-                key = (u, v, cid, 'inferred')
-                if key not in edges_added and u != v:
-                    d = haversine(stop_coords[u][0], stop_coords[u][1],
-                                  stop_coords[v][0], stop_coords[v][1])
-                    weight = capped_edge_weight(d, cor_speed)
-                    dist = round(d, 3)
-                    G.add_edge(u, v, weight=round(weight, 1), weight_km=dist,
-                               corridorID=cid, corridorName=cor_name,
-                               direction=direction, confidence=0.6, edge_type='inferred')
-                    edges_added.add(key)
+        nama_kor = grup.iloc[0].get('corridorName', str(cid)) if 'corridorName' in grup.columns else str(cid)
+        kecepatan_kor = ambil_kecepatan_dasar_kmh(nama_kor)
+        for i in range(len(urutan)):
+            for j in range(i+3, min(i+8, len(urutan))):
+                u, v = urutan[i], urutan[j]
+                kunci = (u, v, cid, 'inferred')
+                if kunci not in sisi_ditambahkan and u != v:
+                    d = hitung_jarak_haversine(koordinat_halte[u][0], koordinat_halte[u][1],
+                                               koordinat_halte[v][0], koordinat_halte[v][1])
+                    bobot = bobot_sisi_terbatas(d, kecepatan_kor)
+                    jarak = round(d, 3)
+                    G.add_edge(u, v, weight=round(bobot, 1), weight_km=jarak,
+                               corridorID=cid, corridorName=nama_kor,
+                               direction=arah, confidence=0.6, edge_type='inferred')
+                    sisi_ditambahkan.add(kunci)
 
-    return G, stop_coords
+    return G, koordinat_halte
 
-@st.cache_resource(show_spinner="Loading ML model...")
-def load_ml_model():
+@st.cache_resource(show_spinner="Memuat model ML...")
+def muat_model_ml():
     try:
         clf = joblib.load('model_clf_transjakarta.pkl')
         hist = joblib.load('historical_avg_travel_time.pkl')
@@ -457,659 +457,659 @@ def load_ml_model():
     except:
         return None, None
 
-# WEATHER
-def get_bmkg_forecast(target_date, target_hour):
+# CUACA
+def ambil_prakiraan_bmkg(tanggal_target, jam_target):
     adm4_code = '31.71.01.1001'
     url = f"https://api.bmkg.go.id/publik/prakiraan-cuaca?adm4={adm4_code}"
     try:
         resp = http_requests.get(url, timeout=8)
         resp.raise_for_status()
         data = resp.json()
-        records = []
+        catatan = []
         if 'data' in data:
             for lokasi in data['data']:
                 for batch in lokasi.get('cuaca', [[]]):
                     for item in batch:
-                        records.append(item)
-        if not records:
+                        catatan.append(item)
+        if not catatan:
             return None
 
-        target_str = target_date.strftime('%Y-%m-%d') if hasattr(target_date, 'strftime') else str(target_date)[:10]
+        target_str = tanggal_target.strftime('%Y-%m-%d') if hasattr(tanggal_target, 'strftime') else str(tanggal_target)[:10]
 
-        date_filtered = [r for r in records if r.get('local_datetime', '').startswith(target_str)]
-        if not date_filtered:
-            date_filtered = records
+        difilter_tanggal = [r for r in catatan if r.get('local_datetime', '').startswith(target_str)]
+        if not difilter_tanggal:
+            difilter_tanggal = catatan
 
-        best = None
-        best_diff = float('inf')
-        for r in date_filtered:
+        terbaik = None
+        selisih_terbaik = float('inf')
+        for r in difilter_tanggal:
             dt = r.get('local_datetime', '')
             if len(dt) >= 13:
                 try:
                     h = int(dt[11:13])
-                    diff = abs(h - target_hour)
-                    if diff < best_diff:
-                        best_diff = diff
-                        best = r
+                    selisih = abs(h - jam_target)
+                    if selisih < selisih_terbaik:
+                        selisih_terbaik = selisih
+                        terbaik = r
                 except:
                     pass
 
-        if best is None:
-            best = date_filtered[0]
+        if terbaik is None:
+            terbaik = difilter_tanggal[0]
 
-        desc = best.get('weather_desc', 'Cerah').lower()
-        if any(kw in desc for kw in ['hujan','rain','petir','thunder']):
-            return 'Hujan Ringan' if 'ringan' in desc else 'Hujan Lebat'
-        if any(kw in desc for kw in ['berawan','cloudy','mendung']):
+        deskripsi = terbaik.get('weather_desc', 'Cerah').lower()
+        if any(kata in deskripsi for kata in ['hujan','rain','petir','thunder']):
+            return 'Hujan Ringan' if 'ringan' in deskripsi else 'Hujan Lebat'
+        if any(kata in deskripsi for kata in ['berawan','cloudy','mendung']):
             return 'Mendung'
         return 'Cerah'
     except:
         pass
     return None
 
-def get_weather(target_date, target_hour, use_realtime=True):
-    if use_realtime:
-        forecast = get_bmkg_forecast(target_date, target_hour)
-        if forecast:
-            return forecast
-    if 13 <= target_hour <= 17:
+def ambil_cuaca(tanggal_target, jam_target, pakai_real_time=True):
+    if pakai_real_time:
+        prakiraan = ambil_prakiraan_bmkg(tanggal_target, jam_target)
+        if prakiraan:
+            return prakiraan
+    if 13 <= jam_target <= 17:
         return random.choice(['Cerah', 'Mendung', 'Hujan Ringan'])
     return random.choice(['Cerah', 'Mendung'])
 
-# ROUTING ENGINE
-def dijkstra_route(graph, source, target, weight_attr='weight', transfer_penalty=15, confidence_power=1.0):
-    if source not in graph or target not in graph:
+# MESIN PERUTEAN
+def rute_dijkstra(graf, asal, tujuan, attr_bobot='weight', penalti_transfer=15, pangkat_kepercayaan=1.0):
+    if asal not in graf or tujuan not in graf:
         return None, float('inf'), 0
     
-    dist = {node: float('inf') for node in graph.nodes()}
-    dist[source] = 0
-    prev = {}
-    heap = [(0, source, None)]
-    visited = set()
-    explored = 0
+    jarak = {node: float('inf') for node in graf.nodes()}
+    jarak[asal] = 0
+    sebelumnya = {}
+    heap = [(0, asal, None)]
+    dikunjungi = set()
+    dieksplorasi = 0
     
     while heap:
-        d, cur, cur_cor = heapq.heappop(heap)
-        if cur in visited and d > dist[cur]:
+        d, curr, curr_kor = heapq.heappop(heap)
+        if curr in dikunjungi and d > jarak[curr]:
             continue
-        visited.add(cur)
-        explored += 1
-        if cur == target:
+        dikunjungi.add(curr)
+        dieksplorasi += 1
+        if curr == tujuan:
             break
-        for nb in graph.successors(cur):
-            edge = graph[cur][nb]
-            w = edge.get(weight_attr, float('inf'))
-            conf = edge.get('confidence', 1.0)
-            cor = edge.get('corridorName', '')
+        for tetangga in graf.successors(curr):
+            sisi = graf[curr][tetangga]
+            w = sisi.get(attr_bobot, float('inf'))
+            conf = sisi.get('confidence', 1.0)
+            kor = sisi.get('corridorName', '')
 
-            effective = w / (max(conf, 0.1) ** confidence_power)
+            efektif = w / (max(conf, 0.1) ** pangkat_kepercayaan)
 
-            if cur_cor is not None and cor and cur_cor and cor != cur_cor:
-                effective += transfer_penalty
+            if curr_kor is not None and kor and curr_kor and kor != curr_kor:
+                efektif += penalti_transfer
 
-            nd = d + effective
-            if nd < dist.get(nb, float('inf')):
-                dist[nb] = nd
-                prev[nb] = cur
-                heapq.heappush(heap, (nd, nb, cor))
+            nd = d + efektif
+            if nd < jarak.get(tetangga, float('inf')):
+                jarak[tetangga] = nd
+                sebelumnya[tetangga] = curr
+                heapq.heappush(heap, (nd, tetangga, kor))
     
-    if target not in prev and source != target:
-        return None, float('inf'), explored
+    if tujuan not in sebelumnya and asal != tujuan:
+        return None, float('inf'), dieksplorasi
     
-    path = []
-    node = target
-    while node in prev:
-        path.append(node)
-        node = prev[node]
-    path.append(source)
-    path.reverse()
-    return path, dist[target], explored
+    jalur = []
+    node = tujuan
+    while node in sebelumnya:
+        jalur.append(node)
+        node = sebelumnya[node]
+    jalur.append(asal)
+    jalur.reverse()
+    return jalur, jarak[tujuan], dieksplorasi
 
-def get_eta_breakdown(graph, path, hour, is_weekend, weather_mult, clf_model=None, weather_condition='Cerah'):
-    if not path or len(path) < 2:
+def dapatkan_rincian_eta(graf, jalur, jam, is_akhir_pekan, pengali_cuaca, model_clf=None, kondisi_cuaca='Cerah'):
+    if not jalur or len(jalur) < 2:
         return None
 
-    travel_time = 0
-    total_dist = 0
-    segments = []
-    transfers = 0
-    prev_corridor = None
-    corridor_changes = []
+    waktu_tempuh = 0
+    total_jarak = 0
+    segmen = []
+    transfer = 0
+    koridor_sebelum = None
+    perubahan_koridor = []
 
-    for i in range(len(path) - 1):
-        u, v = path[i], path[i+1]
-        if graph.has_edge(u, v):
-            w = graph[u][v].get('weight', 10)
-            d = graph[u][v].get('weight_km', 0.5)
-            cor = graph[u][v].get('corridorName', 'Unknown')
-            travel_time += w
-            total_dist += d
-            segments.append({
-                'from': u, 'to': v,
-                'weight': w,
-                'dist_km': d,
-                'corridor': cor
+    for i in range(len(jalur) - 1):
+        u, v = jalur[i], jalur[i+1]
+        if graf.has_edge(u, v):
+            w = graf[u][v].get('weight', 10)
+            d = graf[u][v].get('weight_km', 0.5)
+            kor = graf[u][v].get('corridorName', 'Tidak Diketahui')
+            waktu_tempuh += w
+            total_jarak += d
+            segmen.append({
+                'dari': u, 'ke': v,
+                'bobot': w,
+                'jarak_km': d,
+                'koridor': kor
             })
-            if prev_corridor and prev_corridor != cor:
-                transfers += 1
-                tf_time = get_config()['eta']['transfer_time_minutes']
-                corridor_changes.append({
-                    'at': u,
-                    'from_cor': prev_corridor,
-                    'to_cor': cor,
-                    'transfer_time': tf_time
+            if koridor_sebelum and koridor_sebelum != kor:
+                transfer += 1
+                waktu_transfer = ambil_konfigurasi()['eta']['transfer_time_minutes']
+                perubahan_koridor.append({
+                    'di': u,
+                    'dari_kor': koridor_sebelum,
+                    'ke_kor': kor,
+                    'waktu_transfer': waktu_transfer
                 })
-            prev_corridor = cor
+            koridor_sebelum = kor
         else:
-            fb_speed = get_config()['speed']['fallback_kmh']
-            dist_fb = haversine(
-                graph.nodes[u].get('lat',0), graph.nodes[u].get('lon',0),
-                graph.nodes[v].get('lat',0), graph.nodes[v].get('lon',0)
+            kecepatan_fallback = ambil_konfigurasi()['speed']['fallback_kmh']
+            jarak_fb = hitung_jarak_haversine(
+                graf.nodes[u].get('lat',0), graf.nodes[u].get('lon',0),
+                graf.nodes[v].get('lat',0), graf.nodes[v].get('lon',0)
             )
-            weight = capped_edge_weight(dist_fb, fb_speed)
-            travel_time += weight
-            segments.append({
-                'from': u, 'to': v,
-                'weight': weight,
-                'dist_km': haversine(
-                    graph.nodes[u].get('lat',0), graph.nodes[u].get('lon',0),
-                    graph.nodes[v].get('lat',0), graph.nodes[v].get('lon',0)
+            bobot = bobot_sisi_terbatas(jarak_fb, kecepatan_fallback)
+            waktu_tempuh += bobot
+            segmen.append({
+                'dari': u, 'ke': v,
+                'bobot': bobot,
+                'jarak_km': hitung_jarak_haversine(
+                    graf.nodes[u].get('lat',0), graf.nodes[u].get('lon',0),
+                    graf.nodes[v].get('lat',0), graf.nodes[v].get('lon',0)
                 ),
-                'corridor': 'Transfer'
+                'koridor': 'Transfer'
             })
 
-    hour_period = get_period(hour)
-    first_stop = path[0] if path else 'Unknown'
-    crow_label_full, crow_label_short, crow_score, crow_explanation = predict_crowding_hybrid(
-        clf_model, hour, hour_period, first_stop, is_weekend, weather_condition
+    periode_jam = ambil_periode(jam)
+    halte_pertama = jalur[0] if jalur else 'Tidak Diketahui'
+    label_kepadatan, label_singkat, skor_kepadatan, penjelasan_kepadatan = prediksi_kepadatan_hibrida(
+        model_clf, jam, periode_jam, halte_pertama, is_akhir_pekan, kondisi_cuaca
     )
 
-    waiting_time = get_config()['eta']['waiting_time'].get(crow_label_short.lower(), 5)
-    transfer_time = transfers * get_config()['eta']['transfer_time_minutes']
+    waktu_menunggu = ambil_konfigurasi()['eta']['waiting_time'].get(label_singkat.lower(), 5)
+    waktu_transfer = transfer * ambil_konfigurasi()['eta']['transfer_time_minutes']
 
-    cong = get_config()['eta']['congestion']
-    congestion_delay = 0
-    if is_peak(hour, is_weekend):
-        congestion_delay = travel_time * cong['peak_multiplier']
-    if crow_score > 0.65:
-        congestion_delay += travel_time * cong['crowded_multiplier']
+    kemacetan = ambil_konfigurasi()['eta']['congestion']
+    tundaan_macet = 0
+    if apakah_jam_sibuk(jam, is_akhir_pekan):
+        tundaan_macet = waktu_tempuh * kemacetan['peak_multiplier']
+    if skor_kepadatan > 0.65:
+        tundaan_macet += waktu_tempuh * kemacetan['crowded_multiplier']
 
-    weather_adjustment = travel_time * (weather_mult - 1.0)
+    penyesuaian_cuaca = waktu_tempuh * (pengali_cuaca - 1.0)
 
-    total_eta = travel_time + waiting_time + transfer_time + congestion_delay + weather_adjustment
+    total_eta = waktu_tempuh + waktu_menunggu + waktu_transfer + tundaan_macet + penyesuaian_cuaca
 
-    if transfers > 3 or total_eta > 180:
-        badge = 'Estimasi Kasar'
-    elif crow_score > get_config()['crowding']['labels'][2]['min'] and weather_mult > 1.1:
-        badge = 'Estimasi Kasar'
+    if transfer > 3 or total_eta > 180:
+        lencana = 'Estimasi Kasar'
+    elif skor_kepadatan > ambil_konfigurasi()['crowding']['labels'][2]['min'] and pengali_cuaca > 1.1:
+        lencana = 'Estimasi Kasar'
     else:
-        badge = 'Akurat'
+        lencana = 'Akurat'
 
     return {
-        'travel_time': round(travel_time, 1),
-        'waiting_time': waiting_time,
-        'transfer_time': transfer_time,
-        'congestion_delay': round(congestion_delay, 1),
-        'weather_adjustment': round(weather_adjustment, 1),
+        'waktu_tempuh': round(waktu_tempuh, 1),
+        'waktu_menunggu': waktu_menunggu,
+        'waktu_transfer': waktu_transfer,
+        'tundaan_macet': round(tundaan_macet, 1),
+        'penyesuaian_cuaca': round(penyesuaian_cuaca, 1),
         'total_eta': round(total_eta, 1),
-        'total_dist': round(total_dist, 2),
-        'num_stops': len(path),
-        'transfers': transfers,
-        'crowding_label': crow_label_short,
-        'crowding_label_full': crow_label_full,
-        'crowding_score': crow_score,
-        'crowding_explanation': crow_explanation,
-        'badge': badge,
-        'segments': segments,
-        'corridor_changes': corridor_changes,
-        'is_peak': is_peak(hour, is_weekend)
+        'total_jarak': round(total_jarak, 2),
+        'jumlah_halte': len(jalur),
+        'transfer': transfer,
+        'label_kepadatan': label_singkat,
+        'label_kepadatan_lengkap': label_kepadatan,
+        'skor_kepadatan': skor_kepadatan,
+        'penjelasan_kepadatan': penjelasan_kepadatan,
+        'lencana': lencana,
+        'segmen': segmen,
+        'perubahan_koridor': perubahan_koridor,
+        'is_peak': apakah_jam_sibuk(jam, is_akhir_pekan)
     }
 
-# MAIN APP
-with st.spinner("Loading data..."):
-    df = load_data()
-    G, stop_coords = build_graph(df)
-    clf_model, hist_avg = load_ml_model()
+# APLIKASI UTAMA
+with st.spinner("Memuat data..."):
+    df = muat_data()
+    G, koordinat_halte = bangun_graf(df)
+    model_clf, hist_avg = muat_model_ml()
 
-stops_list = sorted(list(G.nodes()))
+daftar_halte = sorted(list(G.nodes()))
 
-connected_components = list(nx.weakly_connected_components(G))
-largest_cc = max(connected_components, key=len) if connected_components else set()
-isolated_nodes = sum(1 for comp in connected_components if len(comp) == 1)
+komponen_terhubung = list(nx.weakly_connected_components(G))
+komponen_terbesar = max(komponen_terhubung, key=len) if komponen_terhubung else set()
+halte_terisolasi = sum(1 for komp in komponen_terhubung if len(komp) == 1)
 
 # HEADER
-col_logo, col_title, col_clock = st.columns([0.08, 0.62, 0.3])
+kol_logo, kol_judul, kol_jam = st.columns([0.08, 0.62, 0.3])
 
-with col_logo:
+with kol_logo:
     st.markdown("<div style='font-size:2.5rem; text-align:center;'>🚌</div>", unsafe_allow_html=True)
 
-with col_title:
+with kol_judul:
     st.markdown("<h1 style='margin:0; padding:0;'>Smart Transjakarta Route Optimizer</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color:#94a3b8; margin:0;'>Graph routing and machine learning optimization for Transjakarta</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#94a3b8; margin:0;'>Perutean graf dan optimasi machine learning untuk Transjakarta</p>", unsafe_allow_html=True)
 
-with col_clock:
-    now = datetime.now()
+with kol_jam:
+    sekarang = datetime.now()
     st.markdown(f"""
     <div style='text-align:right;'>
-        <div style='font-size:1.5rem; font-weight:700; color:#38bdf8;'>{now.strftime('%H:%M')}</div>
-        <div style='color:#94a3b8; font-size:0.75rem;'>{now.strftime('%d %B %Y')}</div>
+        <div style='font-size:1.5rem; font-weight:700; color:#38bdf8;'>{sekarang.strftime('%H:%M')}</div>
+        <div style='color:#94a3b8; font-size:0.75rem;'>{sekarang.strftime('%d %B %Y')}</div>
     </div>
     """, unsafe_allow_html=True)
 
-col_s1, col_s2, col_s3 = st.columns(3)
-with col_s1:
-    st.markdown("<div class='status-online'>● Graph Loaded</div>", unsafe_allow_html=True)
-with col_s2:
-    st.markdown(f"<div class='{'status-online' if clf_model else 'status-offline'}'>● ML Model Active</div>", unsafe_allow_html=True)
-with col_s3:
-    st.markdown("<div class='status-online'>● Weather API Connected</div>", unsafe_allow_html=True)
+kol_s1, kol_s2, kol_s3 = st.columns(3)
+with kol_s1:
+    st.markdown("<div class='status-online'>● Graf Dimuat</div>", unsafe_allow_html=True)
+with kol_s2:
+    st.markdown(f"<div class='{'status-online' if model_clf else 'status-offline'}'>● Model ML Aktif</div>", unsafe_allow_html=True)
+with kol_s3:
+    st.markdown("<div class='status-online'>● API Cuaca Terhubung</div>", unsafe_allow_html=True)
 
 st.markdown("---")
 
 # SIDEBAR
 with st.sidebar:
-    st.markdown("## System Information")
+    st.markdown("## Informasi Sistem")
 
-    st.markdown("### Graph Statistics")
-    col1, col2 = st.columns(2)
+    st.markdown("### Statistik Graf")
+    kol1, kol2 = st.columns(2)
 
-    components = list(nx.weakly_connected_components(G))
-    largest = max(components, key=len) if components else set()
+    komponen = list(nx.weakly_connected_components(G))
+    terbesar = max(komponen, key=len) if komponen else set()
 
-    col1.metric("Total Stops", f"{G.number_of_nodes():,}")
-    col2.metric("Total Edges", f"{G.number_of_edges():,}")
-    col1.metric("Total Corridors", f"{df['corridorID'].nunique()}")
-    col2.metric("Avg Node Degree", f"{2*G.number_of_edges()/max(G.number_of_nodes(),1):.1f}")
+    kol1.metric("Total Halte", f"{G.number_of_nodes():,}")
+    kol2.metric("Total Sisi", f"{G.number_of_edges():,}")
+    kol1.metric("Total Koridor", f"{df['corridorID'].nunique()}")
+    kol2.metric("Rata-rata Derajat Node", f"{2*G.number_of_edges()/max(G.number_of_nodes(),1):.1f}")
 
-    st.markdown("### Topology Quality")
-    coverage = len(largest) / max(G.number_of_nodes(), 1) * 100
-    st.markdown(f"- **Connected Components:** {len(components)}")
-    st.markdown(f"- **Largest Component:** {len(largest):,} nodes ({coverage:.0f}%)")
-    st.markdown(f"- **Graph Type:** Corridor-Sequential")
-    degrees = sorted([d for _, d in G.degree()], reverse=True)
-    hub_threshold = degrees[max(len(degrees)//20 - 1, 0)] if len(degrees) >= 20 else 10
-    st.markdown(f"- **Transfer Hubs:** {sum(1 for _, d in G.degree() if d >= hub_threshold)} (top 5%)")
+    st.markdown("### Kualitas Topologi")
+    cakupan = len(terbesar) / max(G.number_of_nodes(), 1) * 100
+    st.markdown(f"- **Komponen Terhubung:** {len(komponen)}")
+    st.markdown(f"- **Komponen Terbesar:** {len(terbesar):,} node ({cakupan:.0f}%)")
+    st.markdown(f"- **Tipe Graf:** Berurutan per Koridor")
+    derajat = sorted([d for _, d in G.degree()], reverse=True)
+    ambang_hub = derajat[max(len(derajat)//20 - 1, 0)] if len(derajat) >= 20 else 10
+    st.markdown(f"- **Hub Transfer:** {sum(1 for _, d in G.degree() if d >= ambang_hub)} (top 5%)")
 
-    st.markdown("### Dataset Info")
-    st.markdown(f"- **Trips:** {len(df):,}")
-    st.markdown(f"- **Period:** April 2023")
-    st.markdown(f"- **Avg Travel Time:** {df['travel_time'].mean():.0f} min")
+    st.markdown("### Info Dataset")
+    st.markdown(f"- **Perjalanan:** {len(df):,}")
+    st.markdown(f"- **Periode:** April 2023")
+    st.markdown(f"- **Rata-rata Waktu Tempuh:** {df['travel_time'].mean():.0f} menit")
 
-    st.markdown("### Estimation Mode")
-    st.markdown("**Hybrid ETA**")
-    st.markdown("Graph + ML + Weather")
+    st.markdown("### Mode Estimasi")
+    st.markdown("**ETA Hibrida**")
+    st.markdown("Graf + ML + Cuaca")
 
     st.markdown("---")
-    st.markdown("### Version")
+    st.markdown("### Versi")
     st.markdown("v3.0 — Sequential Corridor Graph")
 
-# MAIN LAYOUT
-st.markdown("## Route Planner")
-st.markdown("Select your origin and destination stops, set your travel schedule, and the system will find the optimal Transjakarta route.")
+# LAYAR UTAMA
+st.markdown("## Perencana Rute")
+st.markdown("Pilih halte asal dan tujuan Anda, atur jadwal perjalanan, dan sistem akan menemukan rute Transjakarta optimal.")
 
-col_input1, col_input2 = st.columns(2)
+kol_input1, kol_input2 = st.columns(2)
 
-with col_input1:
-    origin = st.selectbox("Origin Stop", stops_list, index=stops_list.index("Blok M") if "Blok M" in stops_list else 0)
+with kol_input1:
+    asal = st.selectbox("Halte Asal", daftar_halte, index=daftar_halte.index("Blok M") if "Blok M" in daftar_halte else 0)
 
-with col_input2:
-    dest = st.selectbox("Destination Stop", stops_list, index=stops_list.index("Kota") if "Kota" in stops_list else (stops_list.index("Harmoni") if "Harmoni" in stops_list else min(len(stops_list)-1, 1)))
+with kol_input2:
+    tujuan = st.selectbox("Halte Tujuan", daftar_halte, index=daftar_halte.index("Kota") if "Kota" in daftar_halte else (daftar_halte.index("Harmoni") if "Harmoni" in daftar_halte else min(len(daftar_halte)-1, 1)))
 
-st.markdown("### Travel Settings")
-with st.expander("How to read these settings", expanded=False):
+st.markdown("### Pengaturan Perjalanan")
+with st.expander("Cara membaca pengaturan ini", expanded=False):
     st.markdown("""
-    - **Weekend toggle** — activate for weekend or holiday travel. Affects congestion patterns.
-    - **Departure hour** — determines peak/non-peak hours. Peak hours (06-09 & 16-19) have +20% congestion.
-    - **Priority** — affects Dijkstra route selection:
-        - *Fastest Time*: minimize total ETA
-        - *Minimum Transfers*: avoid corridor changes
-        - *Most Stable Route*: prioritize sequential paths with real data, avoid inferred edges
+    - **Akhir Pekan / Libur** — aktifkan untuk perjalanan akhir pekan atau hari libur. Mempengaruhi pola kemacetan.
+    - **Jam Keberangkatan** — menentukan jam sibuk/non-sibuk. Jam sibuk (06-09 & 16-19) memiliki kemacetan +20%.
+    - **Prioritas** — mempengaruhi pemilihan rute Dijkstra:
+        - *Waktu Tercepat*: meminimalkan total ETA
+        - *Minimal Transfer*: menghindari pergantian koridor
+        - *Rute Paling Stabil*: memprioritaskan jalur berurutan dengan data riil, hindari sisi inferensi
     """)
 
-col_t1, col_t2, col_t3 = st.columns(3)
+kol_t1, kol_t2, kol_t3 = st.columns(3)
 
-with col_t1:
-    is_weekend_toggle = st.toggle("Weekend / Holiday", value=False)
+with kol_t1:
+    toggle_akhir_pekan = st.toggle("Akhir Pekan / Libur", value=False)
 
-with col_t2:
-    travel_hour = st.slider("Departure Hour", 0, 23, 8)
+with kol_t2:
+    jam_keberangkatan = st.slider("Jam Keberangkatan", 0, 23, 8)
 
-with col_t3:
-    priority = st.selectbox("Optimization Priority", ["Fastest Time", "Minimum Transfers", "Most Stable Route"])
+with kol_t3:
+    prioritas = st.selectbox("Prioritas Optimasi", ["Waktu Tercepat", "Minimal Transfer", "Rute Paling Stabil"])
 
-st.markdown("### Weather Condition")
-st.markdown("Weather affects bus operational speed. Rain can increase ETA by up to 25%.")
+st.markdown("### Kondisi Cuaca")
+st.markdown("Cuaca mempengaruhi kecepatan operasional bus. Hujan dapat meningkatkan ETA hingga 25%.")
 
-col_w1, col_w2, col_w3, col_w4 = st.columns([0.2, 0.2, 0.2, 0.4])
+kol_w1, kol_w2, kol_w3, kol_w4 = st.columns([0.2, 0.2, 0.2, 0.4])
 
-with col_w1:
-    use_realtime = st.toggle("BMKG Weather", value=False)
+with kol_w1:
+    pakai_real_time = st.toggle("Cuaca BMKG", value=False)
 
-with col_w2:
-    if use_realtime:
-        travel_day_bmkg = st.selectbox("Day", ["Today", "Tomorrow", "Day After"], label_visibility="collapsed")
-        day_offset = {"Today": 0, "Tomorrow": 1, "Day After": 2}
-        target_date = date.today() + timedelta(days=day_offset.get(travel_day_bmkg, 0))
-        weather_now = get_weather(target_date, travel_hour, use_realtime=True)
-        weather_condition = weather_now
-        st.markdown(f"**{weather_condition}**")
+with kol_w2:
+    if pakai_real_time:
+        hari_perjalanan_bmkg = st.selectbox("Hari", ["Hari Ini", "Besok", "Lusa"], label_visibility="collapsed")
+        offset_hari = {"Hari Ini": 0, "Besok": 1, "Lusa": 2}
+        tanggal_target = date.today() + timedelta(days=offset_hari.get(hari_perjalanan_bmkg, 0))
+        cuaca_sekarang = ambil_cuaca(tanggal_target, jam_keberangkatan, pakai_real_time=True)
+        kondisi_cuaca = cuaca_sekarang
+        st.markdown(f"**{kondisi_cuaca}**")
     else:
-        weather_condition = st.selectbox("Weather", ["Cerah", "Mendung", "Hujan Ringan", "Hujan Lebat"], label_visibility="collapsed")
+        kondisi_cuaca = st.selectbox("Cuaca", ["Cerah", "Mendung", "Hujan Ringan", "Hujan Lebat"], label_visibility="collapsed")
 
-with col_w3:
-    weather_mult = get_weather_multiplier(weather_condition)
-    st.metric("Weather Multiplier", f"{weather_mult:.2f}x")
+with kol_w3:
+    pengali_cuaca = ambil_pengali_cuaca(kondisi_cuaca)
+    st.metric("Pengali Cuaca", f"{pengali_cuaca:.2f}x")
 
-# VALIDATION
-route_found = False
-result = None
+# VALIDASI
+rute_ditemukan = False
+hasil = None
 
-if origin == dest:
-    st.warning("Origin and destination cannot be the same. Please select different stops.")
-elif origin not in G or dest not in G:
-    st.error("One or both stops not found in the route graph.")
+if asal == tujuan:
+    st.warning("Halte asal dan tujuan tidak boleh sama. Silakan pilih halte yang berbeda.")
+elif asal not in G or tujuan not in G:
+    st.error("Satu atau kedua halte tidak ditemukan dalam graf rute.")
 else:
-    with st.spinner("Finding optimal route..."):
-        is_weekend = is_weekend_toggle
+    with st.spinner("Mencari rute optimal..."):
+        is_akhir_pekan = toggle_akhir_pekan
 
-        if priority == "Fastest Time":
-            path, cost, explored = dijkstra_route(G, origin, dest, 'weight', transfer_penalty=15, confidence_power=1.0)
-        elif priority == "Minimum Transfers":
-            path, cost, explored = dijkstra_route(G, origin, dest, 'weight', transfer_penalty=60, confidence_power=1.0)
+        if prioritas == "Waktu Tercepat":
+            jalur, biaya, dieksplorasi = rute_dijkstra(G, asal, tujuan, 'weight', penalti_transfer=15, pangkat_kepercayaan=1.0)
+        elif prioritas == "Minimal Transfer":
+            jalur, biaya, dieksplorasi = rute_dijkstra(G, asal, tujuan, 'weight', penalti_transfer=60, pangkat_kepercayaan=1.0)
         else:
-            path, cost, explored = dijkstra_route(G, origin, dest, 'weight', transfer_penalty=15, confidence_power=2.0)
+            jalur, biaya, dieksplorasi = rute_dijkstra(G, asal, tujuan, 'weight', penalti_transfer=15, pangkat_kepercayaan=2.0)
 
-        if path is None or len(path) < 2:
-            st.error("No route found between these stops.")
-            with st.expander("Possible reasons"):
+        if jalur is None or len(jalur) < 2:
+            st.error("Tidak ditemukan rute antara halte ini.")
+            with st.expander("Kemungkinan penyebab"):
                 st.markdown("""
-                - Graph is disconnected between these stops
-                - Stops are in different connected components
-                - No route data available for this pair
+                - Graf terputus antara halte-halte ini
+                - Halte berada di komponen terhubung yang berbeda
+                - Tidak ada data rute untuk pasangan ini
                 """)
         else:
-            route_found = True
-            result = get_eta_breakdown(G, path, travel_hour, is_weekend, weather_mult, clf_model, weather_condition)
+            rute_ditemukan = True
+            hasil = dapatkan_rincian_eta(G, jalur, jam_keberangkatan, is_akhir_pekan, pengali_cuaca, model_clf, kondisi_cuaca)
 
-# RESULTS
-if route_found and result:
+# HASIL
+if rute_ditemukan and hasil:
     st.markdown("---")
-    st.markdown("## Route Result")
-    st.info("Summary of the best route based on graph routing, historical data, and weather conditions. ETA includes travel time, waiting, transfers, congestion, and weather adjustments.")
+    st.markdown("## Hasil Rute")
+    st.info("Ringkasan rute terbaik berdasarkan perutean graf, data historis, dan kondisi cuaca. ETA mencakup waktu tempuh, menunggu, transfer, kemacetan, dan penyesuaian cuaca.")
 
-    col_r1, col_r2, col_r3, col_r4, col_r5 = st.columns(5)
+    kol_r1, kol_r2, kol_r3, kol_r4, kol_r5 = st.columns(5)
 
-    with col_r1:
-        badge_color = '#10b981' if result['badge'] == 'Akurat' else ('#f59e0b' if result['badge'] == 'Estimasi Kasar' else '#ef4444')
+    with kol_r1:
+        warna_lencana = '#10b981' if hasil['lencana'] == 'Akurat' else ('#f59e0b' if hasil['lencana'] == 'Estimasi Kasar' else '#ef4444')
         st.markdown(f"""
         <div class="info-card" style='text-align:center;'>
             <div class='metric-label'>Total ETA</div>
-            <div class='metric-value'>{result['total_eta']:.0f} <span style='font-size:1rem;'>min</span></div>
-            <div style='margin-top:8px;'><span class='badge-{result['badge'].lower().replace(' ', '-')}'>{result['badge']}</span></div>
+            <div class='metric-value'>{hasil['total_eta']:.0f} <span style='font-size:1rem;'>menit</span></div>
+            <div style='margin-top:8px;'><span class='badge-{hasil['lencana'].lower().replace(' ', '-')}'>{hasil['lencana']}</span></div>
         </div>
         """, unsafe_allow_html=True)
 
-    with col_r2:
+    with kol_r2:
         st.markdown(f"""
         <div class="info-card" style='text-align:center;'>
-            <div class='metric-label'>Total Distance</div>
-            <div class='metric-value'>{result['total_dist']:.1f} <span style='font-size:1rem;'>km</span></div>
+            <div class='metric-label'>Total Jarak</div>
+            <div class='metric-value'>{hasil['total_jarak']:.1f} <span style='font-size:1rem;'>km</span></div>
         </div>
         """, unsafe_allow_html=True)
 
-    with col_r3:
+    with kol_r3:
         st.markdown(f"""
         <div class="info-card" style='text-align:center;'>
-            <div class='metric-label'>Number of Stops</div>
-            <div class='metric-value'>{result['num_stops']}</div>
+            <div class='metric-label'>Jumlah Halte</div>
+            <div class='metric-value'>{hasil['jumlah_halte']}</div>
         </div>
         """, unsafe_allow_html=True)
 
-    with col_r4:
+    with kol_r4:
         st.markdown(f"""
         <div class="info-card" style='text-align:center;'>
-            <div class='metric-label'>Transfers</div>
-            <div class='metric-value'>{result['transfers']}</div>
+            <div class='metric-label'>Transfer</div>
+            <div class='metric-value'>{hasil['transfer']}</div>
         </div>
         """, unsafe_allow_html=True)
 
-    with col_r5:
-        c_label = result['crowding_label']
-        c_score = result.get('crowding_score', 0.5)
-        crow_color = '#10b981' if c_score < 0.3 else ('#f59e0b' if c_score < 0.65 else '#ef4444')
+    with kol_r5:
+        label_k = hasil['label_kepadatan']
+        skor_k = hasil.get('skor_kepadatan', 0.5)
+        warna_penuh = '#10b981' if skor_k < 0.3 else ('#f59e0b' if skor_k < 0.65 else '#ef4444')
         st.markdown(f"""
         <div class="info-card" style='text-align:center;'>
-            <div class='metric-label'>Crowding Level</div>
-            <div class='metric-value' style='color:{crow_color};'>{c_label}</div>
-            <div style='font-size:0.7rem; color:#94a3b8;'>{result.get('crowding_label_full', '')}</div>
+            <div class='metric-label'>Tingkat Kepadatan</div>
+            <div class='metric-value' style='color:{warna_penuh};'>{label_k}</div>
+            <div style='font-size:0.7rem; color:#94a3b8;'>{hasil.get('label_kepadatan_lengkap', '')}</div>
         </div>
         """, unsafe_allow_html=True)
 
-    # ROUTE TIMELINE
-    st.markdown("## Route Timeline")
-    st.caption("Sequence of stops along the route. Travel time between stops is based on historical averages or distance/speed estimation.")
+    # GARIS WAKTU RUTE
+    st.markdown("## Garis Waktu Rute")
+    st.caption("Urutan halte di sepanjang rute. Waktu tempuh antar halte berdasarkan rata-rata historis atau estimasi jarak/kecepatan.")
 
-    timeline_data = []
-    for i in range(len(path)):
-        info = {"index": i+1, "stop": path[i], "type": "origin" if i == 0 else ("destination" if i == len(path)-1 else "transit")}
+    data_garis_waktu = []
+    for i in range(len(jalur)):
+        info = {"index": i+1, "halte": jalur[i], "tipe": "asal" if i == 0 else ("tujuan" if i == len(jalur)-1 else "transit")}
         if i > 0:
-            u, v = path[i-1], path[i]
+            u, v = jalur[i-1], jalur[i]
             w = 0
-            cor = "Transfer"
+            kor = "Transfer"
             if G.has_edge(u, v):
                 w = G[u][v].get('weight', 0)
-                cor = G[u][v].get('corridorName', 'Unknown')
-            info["travel_to"] = round(w, 1)
-            info["corridor"] = cor
+                kor = G[u][v].get('corridorName', 'Tidak Diketahui')
+            info["waktu_ke"] = round(w, 1)
+            info["koridor"] = kor
         else:
-            info["travel_to"] = 0
-            info["corridor"] = "-"
-        timeline_data.append(info)
+            info["waktu_ke"] = 0
+            info["koridor"] = "-"
+        data_garis_waktu.append(info)
 
-    for idx, info in enumerate(timeline_data):
-        col_tl1, col_tl2, col_tl3, col_tl4 = st.columns([0.05, 0.25, 0.15, 0.55])
+    for idx, info in enumerate(data_garis_waktu):
+        kol_tl1, kol_tl2, kol_tl3, kol_tl4 = st.columns([0.05, 0.25, 0.15, 0.55])
 
-        with col_tl1:
-            type_color = "#10b981" if info["type"] == "origin" else ("#ef4444" if info["type"] == "destination" else "#38bdf8")
-            st.markdown(f"<div style='background:{type_color}; width:10px; height:10px; border-radius:50%; margin-top:6px;'></div>", unsafe_allow_html=True)
-            if idx < len(timeline_data) - 1:
+        with kol_tl1:
+            warna_tipe = "#10b981" if info["tipe"] == "asal" else ("#ef4444" if info["tipe"] == "tujuan" else "#38bdf8")
+            st.markdown(f"<div style='background:{warna_tipe}; width:10px; height:10px; border-radius:50%; margin-top:6px;'></div>", unsafe_allow_html=True)
+            if idx < len(data_garis_waktu) - 1:
                 st.markdown("<div style='border-left:2px solid #334155; height:20px; margin-left:4px;'></div>", unsafe_allow_html=True)
 
-        with col_tl2:
-            type_label = "Origin" if info["type"] == "origin" else ("Destination" if info["type"] == "destination" else "Transit")
-            st.markdown(f"**{info['stop']}** <span style='color:#94a3b8; font-size:0.75rem;'>({type_label})</span>", unsafe_allow_html=True)
+        with kol_tl2:
+            label_tipe = "Asal" if info["tipe"] == "asal" else ("Tujuan" if info["tipe"] == "tujuan" else "Transit")
+            st.markdown(f"**{info['halte']}** <span style='color:#94a3b8; font-size:0.75rem;'>({label_tipe})</span>", unsafe_allow_html=True)
 
-        with col_tl3:
-            if info["travel_to"] > 0:
-                st.markdown(f"<span style='color:#94a3b8;'>{info['travel_to']:.0f} min</span>", unsafe_allow_html=True)
+        with kol_tl3:
+            if info["waktu_ke"] > 0:
+                st.markdown(f"<span style='color:#94a3b8;'>{info['waktu_ke']:.0f} menit</span>", unsafe_allow_html=True)
 
-        with col_tl4:
-            if info["corridor"] != "-" and info["corridor"] != "Transfer":
-                st.markdown(f"<span style='color:#38bdf8; font-size:0.75rem;'>Corridor: {info['corridor']}</span>", unsafe_allow_html=True)
-            elif info["corridor"] == "Transfer":
-                st.markdown(f"<span style='color:#f59e0b; font-size:0.75rem;'>Transfer corridor</span>", unsafe_allow_html=True)
+        with kol_tl4:
+            if info["koridor"] != "-" and info["koridor"] != "Transfer":
+                st.markdown(f"<span style='color:#38bdf8; font-size:0.75rem;'>Koridor: {info['koridor']}</span>", unsafe_allow_html=True)
+            elif info["koridor"] == "Transfer":
+                st.markdown(f"<span style='color:#f59e0b; font-size:0.75rem;'>Transfer koridor</span>", unsafe_allow_html=True)
 
         st.markdown("<div style='margin-bottom:2px;'></div>", unsafe_allow_html=True)
 
-    # TIME BREAKDOWN
-    st.markdown("## Time Breakdown")
-    st.caption("Total ETA = Travel Time + Waiting Time + Transfer Time + Congestion Delay + Weather Adjustment.")
+    # RINCIAN WAKTU
+    st.markdown("## Rincian Waktu")
+    st.caption("Total ETA = Waktu Tempuh + Waktu Menunggu + Waktu Transfer + Tundaan Macet + Penyesuaian Cuaca.")
 
-    col_b1, col_b2 = st.columns([0.5, 0.5])
+    kol_b1, kol_b2 = st.columns([0.5, 0.5])
 
-    with col_b1:
-        mc1, mc2, mc3 = st.columns(3)
-        mc1.metric("Travel Time", f"{result['travel_time']:.0f} min")
-        mc2.metric("Waiting Time", f"{result['waiting_time']} min")
-        mc3.metric("Transfer Time", f"{result['transfer_time']} min")
+    with kol_b1:
+        kol_m1, kol_m2, kol_m3 = st.columns(3)
+        kol_m1.metric("Waktu Tempuh", f"{hasil['waktu_tempuh']:.0f} menit")
+        kol_m2.metric("Waktu Menunggu", f"{hasil['waktu_menunggu']} menit")
+        kol_m3.metric("Waktu Transfer", f"{hasil['waktu_transfer']} menit")
 
-        mc1, mc2, mc3 = st.columns(3)
-        mc1.metric("Congestion Delay", f"+{result['congestion_delay']:.0f} min")
-        mc2.metric("Weather Adjustment", f"+{result['weather_adjustment']:.0f} min")
-        mc3.metric("Total ETA", f"{result['total_eta']:.0f} min")
+        kol_m1, kol_m2, kol_m3 = st.columns(3)
+        kol_m1.metric("Tundaan Macet", f"+{hasil['tundaan_macet']:.0f} menit")
+        kol_m2.metric("Penyesuaian Cuaca", f"+{hasil['penyesuaian_cuaca']:.0f} menit")
+        kol_m3.metric("Total ETA", f"{hasil['total_eta']:.0f} menit")
 
-    with col_b2:
-        labels = ['Travel', 'Waiting', 'Transfer', 'Congestion', 'Weather']
-        sizes = [
-            result['travel_time'],
-            result['waiting_time'],
-            result['transfer_time'],
-            result['congestion_delay'],
-            result['weather_adjustment']
+    with kol_b2:
+        label = ['Perjalanan', 'Menunggu', 'Transfer', 'Macet', 'Cuaca']
+        ukuran = [
+            hasil['waktu_tempuh'],
+            hasil['waktu_menunggu'],
+            hasil['waktu_transfer'],
+            hasil['tundaan_macet'],
+            hasil['penyesuaian_cuaca']
         ]
-        colors_pie = ['#38bdf8', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+        warna_pie = ['#38bdf8', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
 
         fig, ax = plt.subplots(figsize=(6, 4))
         fig.patch.set_facecolor('#0f172a')
         ax.set_facecolor('#0f172a')
-        wedges, texts, autotexts = ax.pie(sizes, labels=None, autopct='%1.0f%%',
-                                           colors=colors_pie, startangle=90,
-                                           textprops={'color': '#f1f5f9', 'fontsize': 9})
-        for at in autotexts:
+        irisan, _, autoteks = ax.pie(ukuran, labels=None, autopct='%1.0f%%',
+                                     colors=warna_pie, startangle=90,
+                                     textprops={'color': '#f1f5f9', 'fontsize': 9})
+        for at in autoteks:
             at.set_color('#0f172a')
             at.set_fontweight('bold')
-        ax.legend(wedges, [f'{l} ({s:.0f}m)' for l, s in zip(labels, sizes)],
+        ax.legend(irisan, [f'{l} ({s:.0f}m)' for l, s in zip(label, ukuran)],
                   loc='center left', bbox_to_anchor=(1, 0.5),
                   fontsize=9, frameon=False, labelcolor='#f1f5f9')
         st.pyplot(fig)
 
-    # ETA COMPOSITION PROGRESS BAR
-    st.markdown("### ETA Composition")
-    total = sum(sizes)
+    # KOMPOSISI ETA
+    st.markdown("### Komposisi ETA")
+    total = sum(ukuran)
     if total > 0:
-        proportions = [s/total for s in sizes]
-        bar_html = "<div style='display:flex; height:28px; border-radius:14px; overflow:hidden; margin:8px 0;'>"
-        for prop, color, label in zip(proportions, colors_pie, labels):
+        proporsi = [s/total for s in ukuran]
+        html_bar = "<div style='display:flex; height:28px; border-radius:14px; overflow:hidden; margin:8px 0;'>"
+        for prop, warna, lbl in zip(proporsi, warna_pie, label):
             if prop > 0.01:
-                bar_html += f"<div style='width:{prop*100}%; background:{color}; display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:600; color:#0f172a;'>{label}</div>"
-        bar_html += "</div>"
-        st.markdown(bar_html, unsafe_allow_html=True)
+                html_bar += f"<div style='width:{prop*100}%; background:{warna}; display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:600; color:#0f172a;'>{lbl}</div>"
+        html_bar += "</div>"
+        st.markdown(html_bar, unsafe_allow_html=True)
 
-    # TRAVEL CONDITION ANALYSIS
-    st.markdown("## Travel Condition Analysis")
+    # ANALISIS KONDISI PERJALANAN
+    st.markdown("## Analisis Kondisi Perjalanan")
 
-    col_c1, col_c2, col_c3, col_c4 = st.columns(4)
+    kol_c1, kol_c2, kol_c3, kol_c4 = st.columns(4)
 
-    with col_c1:
-        peak_status = "Peak Hour" if result['is_peak'] else "Non-Peak"
-        peak_color = "#ef4444" if result['is_peak'] else "#10b981"
+    with kol_c1:
+        status_puncak = "Jam Sibuk" if hasil['is_peak'] else "Luar Jam Sibuk"
+        warna_puncak = "#ef4444" if hasil['is_peak'] else "#10b981"
         st.markdown(f"""
         <div class="info-card" style='text-align:center;'>
-            <div class='metric-label'>Time</div>
-            <div class='metric-value' style='font-size:1.2rem; color:{peak_color};'>{peak_status}</div>
+            <div class='metric-label'>Waktu</div>
+            <div class='metric-value' style='font-size:1.2rem; color:{warna_puncak};'>{status_puncak}</div>
         </div>
         """, unsafe_allow_html=True)
 
-    with col_c2:
-        c_score = result.get('crowding_score', 0.5)
-        c_full = result.get('crowding_label_full', result['crowding_label'])
-        crow_color2 = '#10b981' if c_score < 0.3 else ('#f59e0b' if c_score < 0.65 else '#ef4444')
+    with kol_c2:
+        skor_k = hasil.get('skor_kepadatan', 0.5)
+        label_k_lengkap = hasil.get('label_kepadatan_lengkap', hasil['label_kepadatan'])
+        warna_kepadatan = '#10b981' if skor_k < 0.3 else ('#f59e0b' if skor_k < 0.65 else '#ef4444')
         st.markdown(f"""
         <div class="info-card" style='text-align:center;'>
-            <div class='metric-label'>Crowding</div>
-            <div class='metric-value' style='font-size:1.2rem; color:{crow_color2};'>{c_full}</div>
-            <div style='font-size:0.65rem; color:#94a3b8;'>Score: {c_score:.2f}</div>
+            <div class='metric-label'>Kepadatan</div>
+            <div class='metric-value' style='font-size:1.2rem; color:{warna_kepadatan};'>{label_k_lengkap}</div>
+            <div style='font-size:0.65rem; color:#94a3b8;'>Skor: {skor_k:.2f}</div>
         </div>
         """, unsafe_allow_html=True)
 
-    with col_c3:
+    with kol_c3:
         st.markdown(f"""
         <div class="info-card" style='text-align:center;'>
-            <div class='metric-label'>Weather</div>
-            <div class='metric-value' style='font-size:1.2rem; color:#38bdf8;'>{weather_condition}</div>
+            <div class='metric-label'>Cuaca</div>
+            <div class='metric-value' style='font-size:1.2rem; color:#38bdf8;'>{kondisi_cuaca}</div>
         </div>
         """, unsafe_allow_html=True)
 
-    with col_c4:
-        raw_speed = result['total_dist'] / (result['travel_time']/60) if result['travel_time'] > 0 else 0
-        avg_speed = min(raw_speed, 28)
+    with kol_c4:
+        kecepatan_mentah = hasil['total_jarak'] / (hasil['waktu_tempuh']/60) if hasil['waktu_tempuh'] > 0 else 0
+        kecepatan_rata = min(kecepatan_mentah, 28)
         st.markdown(f"""
         <div class="info-card" style='text-align:center;'>
-            <div class='metric-label'>Average Speed</div>
-            <div class='metric-value' style='font-size:1.2rem;'>{avg_speed:.1f} km/h</div>
+            <div class='metric-label'>Kecepatan Rata-rata</div>
+            <div class='metric-value' style='font-size:1.2rem;'>{kecepatan_rata:.1f} km/jam</div>
         </div>
         """, unsafe_allow_html=True)
 
-    # CROWDING INSIGHT
-    st.markdown("### Crowding Insight")
-    c_explain = result.get('crowding_explanation', '')
-    c_full = result.get('crowding_label_full', result['crowding_label'])
+    # WAWASAN KEPADATAN
+    st.markdown("### Wawasan Kepadatan")
+    penjelasan_k = hasil.get('penjelasan_kepadatan', '')
+    label_k_lengkap = hasil.get('label_kepadatan_lengkap', hasil['label_kepadatan'])
     try:
-        label_tiers = get_config()['crowding']['labels']
-        desc = ''
-        for t in label_tiers:
-            if t['label'] == c_full:
-                desc = t['description']
+        tingkat_label = ambil_konfigurasi()['crowding']['labels']
+        deskripsi = ''
+        for t in tingkat_label:
+            if t['label'] == label_k_lengkap:
+                deskripsi = t['description']
                 break
     except:
-        desc = ''
+        deskripsi = ''
 
     st.markdown(f"""
     <div class="info-card">
-        <strong>{c_full}</strong><br>
-        <span style='color:#94a3b8; font-size:0.85rem;'>{desc}</span><br>
-        <span style='color:#64748b; font-size:0.75rem;'>Components: {c_explain}</span>
+        <strong>{label_k_lengkap}</strong><br>
+        <span style='color:#94a3b8; font-size:0.85rem;'>{deskripsi}</span><br>
+        <span style='color:#64748b; font-size:0.75rem;'>Komponen: {penjelasan_k}</span>
     </div>
     """, unsafe_allow_html=True)
 
-    # EXPLANATION PANEL
-    with st.expander("How is this ETA calculated?", expanded=True):
+    # PANEL PENJELASAN
+    with st.expander("Bagaimana ETA ini dihitung?", expanded=True):
         st.markdown(f"""
-        **The ETA is calculated using a combination of:**
+        **ETA dihitung menggunakan kombinasi:**
 
-        - **Graph Routing** — Dijkstra algorithm finding the shortest path in the Transjakarta graph
-        - **Historical Average** — edge weights based on historical average travel times
-        - **Peak Hours** — congestion adjustments during peak hours
-        - **Weather Conditions** — multiplier from BMKG forecast
-        - **Crowding Level** — hybrid ML (70%) + historical baseline (30%) + weather adjustment
-        - **Waiting Time** — based on GTFS scheduled headway per route
+        - **Perutean Graf** : algoritma Dijkstra mencari jalur terpendek dalam graf Transjakarta
+        - **Rata-rata Historis** : bobot sisi berdasarkan waktu tempuh historis rata-rata
+        - **Jam Sibuk** : penyesuaian kemacetan selama jam sibuk
+        - **Kondisi Cuaca** : pengali dari prakiraan BMKG
+        - **Tingkat Kepadatan** : hibrida ML (70%) + baseline historis (30%) + penyesuaian cuaca
+        - **Waktu Menunggu** : berdasarkan jadwal GTFS per rute
 
-        **ETA Formula:**
+        **Rumus ETA:**
 
-        `ETA = Travel Time + Waiting Time + Transfer Time + Congestion Delay + Weather Adjustment`
+        `ETA = Waktu Tempuh + Waktu Menunggu + Waktu Transfer + Tundaan Macet + Penyesuaian Cuaca`
 
-        **Calculation details for this route:**
+        **Detail perhitungan untuk rute ini:**
 
-        - Travel Time: {result['travel_time']:.1f} minutes (sum of edge weights)
-        - Waiting Time: {result['waiting_time']} minutes (estimated wait at stops)
-        - Transfer Time: {result['transfer_time']} minutes ({result['transfers']} transfers x {get_config()['eta']['transfer_time_minutes']} minutes)
-        - Congestion Delay: +{result['congestion_delay']:.0f} minutes ({'peak hour' if result['is_peak'] else 'non-peak'})
-        - Weather Adjustment: +{result['weather_adjustment']:.0f} minutes ({weather_condition}, {weather_mult:.0%} multiplier)
+        - Waktu Tempuh: {hasil['waktu_tempuh']:.1f} menit (jumlah bobot sisi)
+        - Waktu Menunggu: {hasil['waktu_menunggu']} menit (estimasi menunggu di halte)
+        - Waktu Transfer: {hasil['waktu_transfer']} menit ({hasil['transfer']} transfer x {ambil_konfigurasi()['eta']['transfer_time_minutes']} menit)
+        - Tundaan Macet: +{hasil['tundaan_macet']:.0f} menit ({'jam sibuk' if hasil['is_peak'] else 'luar jam sibuk'})
+        - Penyesuaian Cuaca: +{hasil['penyesuaian_cuaca']:.0f} menit ({kondisi_cuaca}, {pengali_cuaca:.0%} pengali)
         """)
 
-    # TRANSFER VISUALIZATION
-    if result['corridor_changes']:
-        st.markdown("## Transfer Points")
-        for tc in result['corridor_changes']:
+    # VISUALISASI TRANSFER
+    if hasil['perubahan_koridor']:
+        st.markdown("## Titik Transfer")
+        for tc in hasil['perubahan_koridor']:
             st.markdown(f"""
             <div class="info-card" style='border-left: 3px solid #f59e0b;'>
-                <strong>Transfer at {tc['at']}</strong><br>
-                <span style='color:#38bdf8;'>{tc['from_cor']}</span>
+                <strong>Transfer di {tc['di']}</strong><br>
+                <span style='color:#38bdf8;'>{tc['dari_kor']}</span>
                 <span style='color:#94a3b8;'> → </span>
-                <span style='color:#10b981;'>{tc['to_cor']}</span>
-                <br><span style='color:#64748b; font-size:0.75rem;'>Estimated transfer time: {get_config()['eta']['transfer_time_minutes']} minutes</span>
+                <span style='color:#10b981;'>{tc['ke_kor']}</span>
+                <br><span style='color:#64748b; font-size:0.75rem;'>Estimasi waktu transfer: {ambil_konfigurasi()['eta']['transfer_time_minutes']} menit</span>
             </div>
             """, unsafe_allow_html=True)
 
-    # FACTORS AFFECTING ETA
-    if clf_model is not None:
-        st.markdown("## Factors Affecting ETA")
-        fi = pd.DataFrame({
-            'Factor': ['Number of Stops', 'Peak Hour', 'Corridor', 'Weather', 'Crowding'],
-            'Impact': [35, 25, 20, 12, 8]
-        }).sort_values('Impact', ascending=True)
+    # FAKTOR YANG MEMPENGARUHI ETA
+    if model_clf is not None:
+        st.markdown("## Faktor yang Mempengaruhi ETA")
+        df_faktor = pd.DataFrame({
+            'Faktor': ['Jumlah Halte', 'Jam Sibuk', 'Koridor', 'Cuaca', 'Kepadatan'],
+            'Dampak': [35, 25, 20, 12, 8]
+        }).sort_values('Dampak', ascending=True)
 
         fig, ax = plt.subplots(figsize=(8, 3.5))
         fig.patch.set_facecolor('#0f172a')
         ax.set_facecolor('#0f172a')
-        colors_fi = plt.cm.viridis(np.linspace(0.2, 0.9, len(fi)))
-        bars = ax.barh(fi['Factor'], fi['Impact'], color=colors_fi, edgecolor='none', alpha=0.85)
-        ax.set_xlabel('Relative Impact (%)', color='#f1f5f9')
+        warna_fi = plt.cm.viridis(np.linspace(0.2, 0.9, len(df_faktor)))
+        batang = ax.barh(df_faktor['Faktor'], df_faktor['Dampak'], color=warna_fi, edgecolor='none', alpha=0.85)
+        ax.set_xlabel('Dampak Relatif (%)', color='#f1f5f9')
         ax.tick_params(colors='#f1f5f9')
         for spine in ax.spines.values():
             spine.set_color('#334155')
         ax.grid(axis='x', alpha=0.2)
-        for bar, val in zip(bars, fi['Impact']):
+        for bar, val in zip(batang, df_faktor['Dampak']):
             ax.text(val+0.5, bar.get_y()+bar.get_height()/2, f'{val}%',
                     va='center', fontsize=9, fontweight='bold', color='#f1f5f9')
         st.pyplot(fig)
@@ -1118,14 +1118,14 @@ if route_found and result:
 st.markdown("""
 <div class='footer-text'>
     <strong>Smart Transjakarta Route Optimizer</strong><br>
-    Graph Routing + Machine Learning + Weather Integration<br>
-    Data Science and Transportation Optimization Project
+    Perutean Graf + Machine Learning + Integrasi Cuaca<br>
+    Proyek Optimasi Data Science dan Transportasi
     <br><br>
     <span style='font-size:0.7rem;'>
-    <strong>Disclaimer:</strong> The dataset used is historical Transjakarta data from April 2023 (one month).<br>
-    Crowding predictions and travel time estimates are based on these historical patterns.<br>
-    The system does not account for seasonal changes, national holidays, or unexpected events.<br>
-    Real-time weather data is provided by BMKG.
+    <strong>Catatan:</strong> Dataset yang digunakan adalah data historis Transjakarta dari April 2023 (satu bulan).<br>
+    Prediksi kepadatan dan estimasi waktu tempuh didasarkan pada pola historis tersebut.<br>
+    Sistem tidak memperhitungkan perubahan musiman, hari libur nasional, atau kejadian tak terduga.<br>
+    Data cuaca real-time disediakan oleh BMKG.
     </span>
 </div>
 """, unsafe_allow_html=True)
