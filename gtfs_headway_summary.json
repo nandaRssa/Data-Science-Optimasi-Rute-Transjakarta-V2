@@ -1,9 +1,0 @@
-{
-  "source": "gtfs.transjakarta.co.id",
-  "total_routes": 253,
-  "total_trips": 717,
-  "total_stops": 8216,
-  "total_frequencies": 772,
-  "routes_with_headway": 253,
-  "avg_headway_min": 32.1
-}

@@ -455,6 +455,29 @@ def muat_model_ml():
     except:
         return None, None
 
+@st.cache_data(show_spinner=False)
+def muat_gtfs_waiting():
+    """Load GTFS waiting time per koridor dari gtfs_waiting_config.json."""
+    try:
+        with open('gtfs_waiting_config.json', encoding='utf-8') as f:
+            return json.load(f)
+    except:
+        return {"per_route": {}, "default_sepi": 3, "default_normal": 5, "default_padat": 8}
+
+def ambil_waktu_menunggu(gtfs_cfg, nama_koridor, label_singkat):
+    """Lookup waiting time dari GTFS per koridor. Fallback ke crowding-based."""
+    per_route = gtfs_cfg.get('per_route', {}) if gtfs_cfg else {}
+    if nama_koridor and nama_koridor in per_route:
+        raw = per_route[nama_koridor]
+        return max(2, min(round(raw), 15))  # cap 2-15 menit
+    # Fallback: crowding-based dari default GTFS config
+    defaults = {
+        'sepi':   gtfs_cfg.get('default_sepi', 3) if gtfs_cfg else 3,
+        'normal': gtfs_cfg.get('default_normal', 5) if gtfs_cfg else 5,
+        'padat':  gtfs_cfg.get('default_padat', 8) if gtfs_cfg else 8,
+    }
+    return defaults.get(label_singkat.lower(), 5)
+
 # CUACA
 def ambil_prakiraan_bmkg(tanggal_target, jam_target):
     adm4_code = '31.71.01.1001'
@@ -563,7 +586,7 @@ def rute_dijkstra(graf, asal, tujuan, attr_bobot='weight', penalti_transfer=15, 
     jalur.reverse()
     return jalur, jarak[tujuan], dieksplorasi
 
-def dapatkan_rincian_eta(graf, jalur, jam, is_akhir_pekan, pengali_cuaca, model_clf=None, kondisi_cuaca='Cerah'):
+def dapatkan_rincian_eta(graf, jalur, jam, is_akhir_pekan, pengali_cuaca, model_clf=None, kondisi_cuaca='Cerah', gtfs_waiting=None):
     if not jalur or len(jalur) < 2:
         return None
 
@@ -622,7 +645,10 @@ def dapatkan_rincian_eta(graf, jalur, jam, is_akhir_pekan, pengali_cuaca, model_
         model_clf, jam, periode_jam, halte_pertama, is_akhir_pekan, kondisi_cuaca
     )
 
-    waktu_menunggu = ambil_konfigurasi()['eta']['waiting_time'].get(label_singkat.lower(), 5)
+    # Waiting time dari GTFS (per koridor), fallback ke crowding-based
+    koridor_pertama = segmen[0]['koridor'] if segmen else None
+    waktu_menunggu = ambil_waktu_menunggu(gtfs_waiting, koridor_pertama, label_singkat)
+    sumber_waiting = 'GTFS' if (gtfs_waiting and koridor_pertama and koridor_pertama in gtfs_waiting.get('per_route', {})) else 'Default'
     waktu_transfer = transfer * ambil_konfigurasi()['eta']['transfer_time_minutes']
 
     kemacetan = ambil_konfigurasi()['eta']['congestion']
@@ -660,7 +686,9 @@ def dapatkan_rincian_eta(graf, jalur, jam, is_akhir_pekan, pengali_cuaca, model_
         'lencana': lencana,
         'segmen': segmen,
         'perubahan_koridor': perubahan_koridor,
-        'is_peak': apakah_jam_sibuk(jam, is_akhir_pekan)
+        'is_peak': apakah_jam_sibuk(jam, is_akhir_pekan),
+        'gtfs_koridor': koridor_pertama,
+        'sumber_waiting': sumber_waiting,
     }
 
 # APLIKASI UTAMA
@@ -668,6 +696,7 @@ with st.spinner("Memuat data..."):
     df = muat_data()
     G, koordinat_halte = bangun_graf(df)
     model_clf, _ = muat_model_ml()
+    gtfs_waiting = muat_gtfs_waiting()
 
 daftar_halte = sorted(list(G.nodes()))
 
@@ -827,7 +856,7 @@ else:
                 """)
         else:
             rute_ditemukan = True
-            hasil = dapatkan_rincian_eta(G, jalur, jam_keberangkatan, is_akhir_pekan, pengali_cuaca, model_clf, kondisi_cuaca)
+            hasil = dapatkan_rincian_eta(G, jalur, jam_keberangkatan, is_akhir_pekan, pengali_cuaca, model_clf, kondisi_cuaca, gtfs_waiting)
 
 # HASIL
 if rute_ditemukan and hasil:
@@ -1069,7 +1098,7 @@ if rute_ditemukan and hasil:
         **Detail perhitungan untuk rute ini:**
 
         - Waktu Tempuh: {hasil['waktu_tempuh']:.1f} menit (jumlah bobot sisi)
-        - Waktu Menunggu: {hasil['waktu_menunggu']} menit (estimasi menunggu di halte)
+        - Waktu Menunggu: {hasil['waktu_menunggu']} menit — sumber: **{hasil.get('sumber_waiting', 'Default')}** {('(koridor: ' + hasil.get('gtfs_koridor','') + ')') if hasil.get('sumber_waiting') == 'GTFS' else '(fallback crowding-based)'}
         - Waktu Transfer: {hasil['waktu_transfer']} menit ({hasil['transfer']} transfer x {ambil_konfigurasi()['eta']['transfer_time_minutes']} menit)
         - Tundaan Macet: +{hasil['tundaan_macet']:.0f} menit ({'jam sibuk' if hasil['is_peak'] else 'luar jam sibuk'})
         - Penyesuaian Cuaca: +{hasil['penyesuaian_cuaca']:.0f} menit ({kondisi_cuaca}, {pengali_cuaca:.0%} pengali)

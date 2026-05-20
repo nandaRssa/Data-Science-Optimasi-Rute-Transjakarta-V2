@@ -1,182 +1,106 @@
-# 🚌 Narasi Demonstrasi Aplikasi
-# Smart Transjakarta Route Optimizer
-
-> **Untuk:** Presentasi / Demo Proyek Data Science  
-> **Durasi estimasi:** 7–10 menit  
-> **Audiens:** Dosen, tim penguji, atau rekan kelompok
+# 🚌 Narasi Demo — Smart Transjakarta Route Optimizer
+> **Durasi:** 5–7 menit | **Fokus:** Praktek langsung + Penjelasan hasil
 
 ---
 
 ## 🎬 PEMBUKAAN (±30 detik)
 
-> *[Buka aplikasi di browser, tampilkan halaman utama]*
+> *[Buka http://localhost:8501]*
 
-"Selamat pagi/siang/sore. Kami dari Kelompok 23 akan mendemonstrasikan aplikasi **Smart Transjakarta Route Optimizer** — sebuah sistem optimasi rute transportasi publik yang memadukan tiga teknologi utama: **Graph Routing**, **Machine Learning**, dan **integrasi data cuaca real-time dari BMKG**."
+"Kami akan mendemonstrasikan **Smart Transjakarta Route Optimizer** — sistem optimasi rute berbasis **Graph Routing, Machine Learning, BMKG real-time, dan data jadwal GTFS Transjakarta**."
 
-"Aplikasi ini dibangun menggunakan Streamlit dan sepenuhnya ditenagai oleh analisis data historis Transjakarta bulan April 2023 — mencakup lebih dari **ratusan ribu data perjalanan penumpang**."
-
----
-
-## 🖥️ BAGIAN 1 — Tampilan Utama & Status Sistem (±1 menit)
-
-> *[Arahkan kursor ke bagian header dan status]*
-
-"Saat pertama kali dibuka, aplikasi langsung menampilkan **header informatif** berisi jam real-time dan tanggal hari ini."
-
-"Di bawahnya terdapat tiga indikator status sistem:"
-
-- **✅ Graph Loaded** — menandakan graf rute Transjakarta berhasil dibangun dari data historis
-- **✅ ML Model Active** — model Machine Learning klasifikasi kepadatan sudah siap digunakan
-- **✅ Weather API Connected** — koneksi ke API cuaca BMKG aktif
+"Semua data dilatih dari **36.556 perjalanan Transjakarta April 2023**."
 
 ---
 
-## 📊 BAGIAN 2 — Sidebar: Statistik Sistem (±1 menit)
+## 🖥️ STATUS SISTEM (±20 detik)
 
-> *[Buka sidebar di kiri layar]*
+> *[Tunjuk tiga indikator di header]*
 
-"Di sidebar sebelah kiri, kita bisa melihat **statistik lengkap sistem** yang dibangun:"
-
-- **Total Stops** — jumlah halte unik yang terdaftar dalam graf
-- **Total Edges** — koneksi antar halte yang mewakili segmen perjalanan
-- **Total Corridors** — jumlah koridor Transjakarta yang tercakup
-
-"Yang menarik adalah **Topology Quality** — sistem menghitung seberapa baik konektivitas grafnya. Kita bisa lihat berapa persen node yang terhubung dalam satu komponen terbesar, serta berapa halte yang menjadi **Transfer Hub** — titik pergantian antar koridor."
-
-"Di bagian bawah ada ringkasan dataset: jumlah trip, periode data, dan rata-rata waktu tempuh."
+"Tiga indikator menunjukkan sistem siap: **● Graf Dimuat, ● Model ML Aktif, ● API Cuaca Terhubung**."
 
 ---
 
-## 🗺️ BAGIAN 3 — Route Planner: Input Perjalanan (±2 menit)
+## 🗺️ DEMO UTAMA — Input Rute (±1 menit)
 
-> *[Arahkan ke bagian Route Planner di tengah halaman]*
+> *[Isi form Perencana Rute]*
 
-"Inti dari aplikasi ini adalah **Route Planner**. Mari kita coba simulasi perjalanan nyata."
+**Setting yang dipakai:**
+- **Halte Asal:** Blok M
+- **Halte Tujuan:** Kota
+- **Jam Keberangkatan:** 08:00 *(jam sibuk pagi)*
+- **Prioritas Optimasi:** Waktu Tercepat
+- **Cuaca:** aktifkan toggle **Cuaca BMKG** *(atau pilih Hujan Ringan untuk efek lebih dramatis)*
 
-### Langkah 1 — Pilih Halte
-
-> *[Pilih Origin: **Blok M**, Destination: **Kota**]*
-
-"Saya pilih rute dari **Blok M** menuju **Kota** — salah satu rute tersibuk Transjakarta yang melintasi pusat kota Jakarta."
-
-### Langkah 2 — Atur Parameter Perjalanan
-
-> *[Atur slider dan toggle]*
-
-"Di bagian **Travel Settings**, kita bisa mengatur tiga parameter penting:"
-
-1. **Weekend/Holiday Toggle** — mengaktifkan mode akhir pekan yang memengaruhi pola kemacetan
-2. **Departure Hour** — jam keberangkatan. Saya set jam **08:00** untuk mensimulasikan jam sibuk pagi hari
-3. **Optimization Priority** — ada tiga pilihan:
-   - *Waktu Tercepat*: Dijkstra meminimalkan total ETA
-   - *Minimal Transfer*: menghindari pergantian koridor sebanyak mungkin
-   - *Rute Paling Stabil*: memprioritaskan jalur dengan data historis real, menghindari edge inferensi
-
-### Langkah 3 — Kondisi Cuaca
-
-> *[Tunjukkan toggle BMKG dan pilihan manual]*
-
-"Untuk cuaca, sistem menyediakan dua mode:"
-- **Mode BMKG Real-time**: sistem otomatis mengambil prakiraan cuaca dari API BMKG untuk hari ini, besok, atau lusa
-- **Mode Manual**: pengguna bisa memilih sendiri kondisi cuaca — Cerah, Mendung, Hujan Ringan, atau Hujan Lebat
-
-"Kondisi cuaca ini bukan sekadar dekorasi — hujan lebat dapat **menambah ETA hingga 25%** karena penurunan kecepatan operasional bus."
+"Sistem menjalankan algoritma **Dijkstra** pada graf 3.616 halte dengan bobot berdasarkan waktu tempuh historis."
 
 ---
 
-## 📈 BAGIAN 4 — Hasil Rute & ETA (±2 menit)
+## 📈 PENJELASAN HASIL (±2 menit)
 
-> *[Scroll ke bawah ke bagian Hasil Rute setelah rute ditemukan]*
+> *[Scroll ke Hasil Rute]*
 
-"Setelah klik proses, sistem menjalankan algoritma **Dijkstra** pada graf berarah Transjakarta dan menampilkan hasil lengkap."
+### Lima Kartu Metrik
+Tunjuk satu per satu dan jelaskan:
 
-### Kartu Metrik Utama
-
-"Ada lima kartu ringkasan:"
-
-| Metrik | Penjelasan |
+| Kartu | Yang perlu dijelaskan |
 |---|---|
-| **Total ETA** | Estimasi waktu total perjalanan (menit) |
-| **Total Jarak** | Jarak tempuh berdasarkan koordinat GPS (km) |
-| **Jumlah Halte** | Berapa halte yang dilewati |
-| **Transfer** | Berapa kali ganti koridor |
-| **Tingkat Kepadatan** | Sepi / Normal / Padat — hasil prediksi ML |
-
-"Perhatikan badge di Total ETA — bisa **Akurat** atau **Estimasi Kasar**, tergantung kompleksitas rute dan kondisi perjalanan."
+| **Total ETA** | "Ini total estimasi waktu — perhatikan badge **Akurat** atau **Estimasi Kasar**" |
+| **Total Jarak** | "Dihitung dari koordinat GPS tiap halte (Haversine)" |
+| **Jumlah Halte** | "Berapa halte yang dilalui sepanjang rute" |
+| **Transfer** | "Berapa kali ganti koridor" |
+| **Tingkat Kepadatan** | "Hasil prediksi ML: Sepi / Normal / Padat" |
 
 ---
 
-## ⏱️ BAGIAN 5 — Rincian Waktu & Pie Chart (±1 menit)
+## ⏱️ RINCIAN ETA (±1 menit)
 
-> *[Tunjukkan bagian Rincian Waktu]*
+> *[Tunjuk panel Rincian Waktu & Pie Chart]*
 
-"Keunggulan sistem kami adalah **transparansi perhitungan ETA**. Total ETA bukan angka ajaib — melainkan hasil penjumlahan lima komponen:"
+"ETA bukan angka ajaib — ini terdiri dari **5 komponen**:"
 
 ```
 Total ETA = Waktu Tempuh + Waktu Menunggu + Waktu Transfer + Tundaan Macet + Penyesuaian Cuaca
 ```
 
-"Di sebelah kanan, pie chart menunjukkan **proporsi masing-masing komponen** secara visual. Ini membantu penumpang memahami mengapa perjalanan bisa lebih lama dari ekspektasi."
-
-"Di bawahnya ada **progress bar komposisi ETA** — representasi horizontal yang lebih intuitif."
-
----
-
-## 🚦 BAGIAN 6 — Analisis Kondisi Perjalanan (±1 menit)
-
-> *[Scroll ke Analisis Kondisi Perjalanan]*
-
-"Bagian ini menampilkan empat kondisi real-time yang memengaruhi perjalanan:"
-
-1. **Status Waktu** — apakah ini jam sibuk (merah) atau luar jam sibuk (hijau)
-2. **Kepadatan** — hasil hybrid: **70% Machine Learning + 30% baseline historis + bobot cuaca**
-3. **Cuaca** — kondisi yang dipilih/diambil dari BMKG
-4. **Kecepatan Rata-rata** — estimasi kecepatan operasional bus di rute tersebut
-
-"Di bawahnya ada **Wawasan Kepadatan** — penjelasan kontekstual mengapa bus di rute ini diprediksi sepi/normal/padat pada jam tersebut, berdasarkan pola historis."
+**Poin highlight:**
+- **Waktu Menunggu** → diambil dari **data GTFS resmi** per koridor, bukan angka flat. Blok M - Kota: ~10 menit. Tertulis juga sumbernya: *"sumber: GTFS (koridor: ...)"*
+- **Tundaan Macet** → otomatis +20% jika jam 08:00 dan bukan akhir pekan
+- **Penyesuaian Cuaca** → jika hujan, ETA naik hingga 25%
 
 ---
 
-## 🔄 BAGIAN 7 — Titik Transfer & Faktor ETA (±30 detik)
+## 🚦 KONDISI PERJALANAN (±30 detik)
 
-> *[Tunjukkan bagian Transfer Points jika ada]*
+> *[Tunjuk bagian Analisis Kondisi]*
 
-"Jika rute memerlukan pergantian koridor, sistem menampilkan **setiap titik transfer** secara eksplisit — di halte mana, dari koridor apa ke koridor apa, dan berapa menit estimasi waktu transfernya."
+"Ada 4 kondisi yang terdeteksi: **Status Waktu, Kepadatan, Cuaca, Kecepatan Rata-rata.**"
 
-"Terakhir, grafik **Faktor yang Mempengaruhi ETA** menunjukkan bobot relatif setiap faktor:"
-- Jumlah halte: 35%
-- Jam sibuk: 25%
-- Koridor: 20%
-- Cuaca: 12%
-- Kepadatan: 8%
+"Kepadatan dihitung secara hybrid: **30% ML + 70% baseline historis + bobot cuaca** — lebih stabil dan bisa dijelaskan."
 
 ---
 
-## 🔬 PENUTUP — Keunggulan Teknis (±1 menit)
+## 🔄 TRANSFER (jika ada)
 
-> *[Bisa sambil scroll up ke atas atau tampilkan slide presentasi]*
+> *[Tunjuk Titik Transfer jika rute punya transfer]*
 
-"Sebelum kami tutup, ada beberapa keunggulan teknis yang ingin kami highlight:"
-
-### 1. Graf Rute Berlapis
-Sistem membangun graf berarah dengan **tiga jenis edge**:
-- **Sequential** — edge langsung antar halte bersebelahan dalam koridor (kepercayaan 100%)
-- **Inferred** — edge antara halte yang tidak bersebelahan dalam koridor yang sama (kepercayaan 60%)
-- Edge dengan **capping** agar waktu tempuh tidak tidak realistis
-
-### 2. Klasifikasi Kepadatan Berbasis ML
-Model **Random Forest** dilatih dengan 200 estimator menggunakan data historis April 2023. Evaluasi menggunakan **5-fold cross-validation** dengan metrik F1-macro.
-
-### 3. Hybrid Crowding Score
-Prediksi kepadatan bukan hanya dari ML, tapi **dipadukan** dengan baseline historis dan kondisi cuaca — menghasilkan skor yang lebih robust dan explainable.
-
-### 4. Integrasi BMKG Real-time
-Cuaca diambil langsung dari API resmi BMKG berdasarkan kode wilayah Jakarta Pusat, disesuaikan dengan jam keberangkatan yang dipilih pengguna.
+"Setiap titik transfer ditampilkan eksplisit — di halte mana, dari koridor apa ke koridor apa."
 
 ---
 
-> **"Terima kasih. Kami membuka sesi tanya jawab."**
+## 🔬 PENUTUP — 5 Keunggulan (±45 detik)
+
+> *[Sambil scroll up atau tutup dengan slide]*
+
+1. **Graf Rute Berlapis** — Sequential + Inferred edges, 98% terhubung
+2. **ML RandomForest** — 200 trees, F1-macro 88%, 5-fold CV
+3. **Hybrid Crowding** — ML + baseline historis + cuaca, explainable
+4. **BMKG Real-time** — cuaca prakiraan per jam keberangkatan
+5. **GTFS Transjakarta** — waiting time nyata per koridor, 253 rute
 
 ---
 
-*Catatan: Aplikasi menggunakan data historis April 2023. Prediksi kepadatan dan ETA didasarkan pada pola historis tersebut dan tidak memperhitungkan perubahan musiman atau kejadian tak terduga.*
+> **"Terima kasih. Kami siap menjawab pertanyaan."**
+
+---
+*Data: April 2023 | Model: RandomForest 145MB | Graf: 3.616 halte*
