@@ -452,7 +452,10 @@ def muat_model_ml():
     try:
         clf = joblib.load('model_clf_transjakarta.pkl')
         return clf, None
-    except:
+    except Exception as e:
+        import sys as _sys, traceback as _tb
+        _buf = _tb.format_exception(type(e), e, e.__traceback__)
+        st.warning(f"Model ML gagal dimuat:\n{''.join(_buf)}")
         return None, None
 
 @st.cache_data(show_spinner=False)
