@@ -2,6 +2,6 @@ __pycache__/
 *.pyc
 *.pyo
 *.zip
-*.pkl
+
 backup/
 .DS_Store
